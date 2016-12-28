@@ -1,4 +1,4 @@
-# eaglePCB 学习笔记
+# eaglePCB
 #元器件
     - symbol 符号 用于原理图
     - package 封装 用于PCB
