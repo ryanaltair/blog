@@ -8,67 +8,28 @@
 
 ## 什么是线程(thread)和什么时候需要使用它
  
-Sometimes in an application we need to execute tasks that will take a while to finish. 
-The perfect example is reading something from disk. In the computer the CPU
- is way faster 
-than accessing the memory which is way faster than accessing the hard disk. 
-So accessing, for example, an image from the HD can take a while compared to
- the normal flow of the application.
 在一个应用程序中，我们可能会碰到需要耗费些许时间的任务。例如，从硬盘上读取一些东西，CPU的读取内存的速度总是快于硬盘，那么，需要读取一张保存在硬盘中的高清图片，对于应用程序的其他任务来说，就是一个长时间的任务了。
-In openFrameworks, and in general, usually when working with openGL, our application 
-will run in an infinite loop calling update/draw every cycle of the loop. 
-If we have vertical sync enabled, and our screens works at 60Hz, each of
- those cycles will last around 16ms (1s/(60frames/s))*1000(ms/s). 
- Loading an image from disk can take way more than those 16ms, 
- so if we try to load an image from our update method, for example, 
- we'll notice a pause in our animation.
-
+ 
 在openFrameworks， 总是需要与openGL协同工作，我们的应用程序需要不断进行重复update/draw这个循环。
 如果打开了垂直同步(vertical sync)，那么我们的屏幕会保存60Hz的刷新率，那么这个循环的执行时间就只有16ms(1s/(60frames/s))*1000(ms/s).
 而从硬盘读取一张图片总是会超过16ms的，因此，如果在update中读取图片，那么，我们会注意到程序假死了。
-
-To solve this we usually use threads. Threads are a way of executing certain tasks inside an application outside of the main flow. 
-That way we can run more than one task at once so things that are slow don't stop the main flow of the application.
- We can also use threads to accelerate tasks by dividing them in several smaller tasks and running each of those at the same time. You can think of a thread as a subprogram inside your program.
-
+ 
+  
 为了解决这个问题，我们使用线程(threads)。线程指在主程序工作流外执行的一个特定任务。可以让我们可以一次同时执行多个任务而不会令我们的主程序假死。我们也可以将大型任务分开，变成多个小块的任务，加快处理速度。你可以把线程当作是程序的子程序。
-
-Every application has at least 1 thread. In openFrameworks, that thread is where the setup/update/draw loop happens. We'll call this the main (or openGL) thread. 
-But we can create more threads and each of them will run separately from the others.
-
+ 
 每一个应用程序都必须至少包含一个线程。在openFrameworks中，这个不可少的线程就是 setup/update/draw 。我们称之为主线程(或者openGL线程)。我们可以创建多个线程，而它们之间相互独立。
-
-So if we want to load an image in the middle of our application, 
-instead of loading our image in update, 
-we can create a thread that loads the image for us.
- The problem with this is that once we create a thread, 
- the main thread doesn't know when it has finished, 
- so we need to be able to communicate the results 
- from our auxiliary thread to the main one.
-  There's also problems that might arrise from different 
-  threads accessing the same areas in memory. We'll need some mechanisms to synchronize the access to shared memory between 2 or more threads.
-
+ 
 因此， 当我们想要在程序中期读取一张图片，不需要在update中读取图片，
 我们可以创建一个专门用于读取图片的副线程。问题上，一旦创建线程，
 主线程就不知道什么时候这个副线程会结束，因此，我们需要一个得让主副线程得以交流。
 还有的问题上，多个线程不能访问同事同一块内存。我们需要以下机制来确保不同线程实现异步访问内存。
-
-First let's see how to create a thread in openFrameworks.
-
+ 
 首先，我们来看在openFrameworks中如何创建一个线程。
 
 ## ofThread
-
-Every application has at least one thread, the main thread (also called the GL thread), when it's using openGL.
-
+ 
 每个应用程序都有至少包含一个线程，也就是主线程（也称之为openGL线程），用来调用openGL。
-
-But as we've said we can create auxiliary threads to do certain tasks that would take too long to run in the main thread. 
-In openFrameworks we can do that using the ofThread class. 
-ofThread is not meant to be used directly, 
-instead we inherit from it and implement a `threadedFunction` which 
-will later get called from the auxiliary thread once we start it:
-
+ 
 而我们对于需要耗费长时间的任务，则应该使用辅助线程。
 在openFrameworks中，我们可以通过ofThread类来使用额外的线程。
 ofThread并不能直接使用，需要我们继承它，并根据需求实现 `threadedFunction` ，最后，在需要的时候激活这个线程。
@@ -98,26 +59,15 @@ void ofApp::keyPressed(int key){
     imgLoader.startThread(); //激活线程
 }
 ```
-
-When we call `startThread()`, `ofThread` starts a new thread and returns immediately, 
-that thread will call our `threadedFunction` and will finish when the function ends.
-
+ 
 一旦我们调用 `startThread()`，`ofThread`就会创建一个新的线程并立即返回。而这个线程则会立即调用 `threadedFunction`直到完成。
-
-This way the loading of the image happens simultaneously to our update/draw loop
- and our application doesn't stop while waiting till the image is loaded from disk.
-
+ 
 这样，就能在update进行的时候，同时进行读取图片，而不需中断。
-
-Now, how do we know when our image is loaded? The thread will run separately from the main thread of our application:
-
+  
 现在，我们如何知道图片已读取完毕？这个线程可是独立与我们的主线程的。
 
 ![Simple Thread](images/simple_thread.png "Simple Thread")
-
-As we see in the image the duration of loading of the image and thus the duration of the call to threadedFunction is not automatically known to the main thread. 
-Since all our thread does is load the image, we can check if the thread has finished running which will tell us that the image has loaded. For that ofThread has a method: `isThreadRunning()`:
-
+ 
 如我们在上图所示，副线程并不会将在读取图片的情况主动告知主线程，而当其完成了读取图片，我们则可以通过确认其是否在运行来推断图片是否读取完毕，这需要用到方法 `isThreadRunning()`：
 
 ```cpp
@@ -167,11 +117,7 @@ void ofApp::keyPressed(int key){
 }
 ```
 
-
-Now as you can see we can only load a new image when the first one has finished loading.
- What if we want to load more than one? A possible solution would 
- be to start a new thread and ask it if it's been loaded already:
-
+ 
 现在你知道如何读取一张图片了。
 那如果我们一次性要读多张图片呢？一个可行的方法是创建多个线程。
 
@@ -231,17 +177,8 @@ void ofApp::keyPressed(int key){
 }
 ```
 
-Another possibility would be to use 1 thread only. 
-To do that a possible solution would be to 
-use a queue in our loading thread whenever 
-we want to load a new image. 
-To do this we insert it's path in the queue 
-and when the threadedFunction finishes 
-loading one image it checks the queue.
- If there's a new image it loads it and it is removed from the queue.
-
-另一只办法是只使用一个线程，但在线程中设置一个队列。让线程可以逐个读取图片。
-主程序将图片路径添加队列，而副程序则负责将队列中图片读取出来。
+另一种办法只使用一个线程，但需要在线程中设置一个队列，才能让线程可以逐个读取图片。
+我们需要在主线程中将图片路径添加到队列中，而辅助线程中的 `threadedFunction()` 则负责检查是否有新图片需要读取，如果有，则取出队列中的图片路径，并据此，将图片读取出来。
 
 The problem with this is that we will be trying to access 
 the queue from 2 different threads, and as we've mentioned 
@@ -253,22 +190,22 @@ a memory structure there's the possibility that the memory
  crash. Imagine the next sequence of instruction calls 
  from the 2 different threads:
 
-但这需要解决2个不同的线程访问同一个内存区（这里就是队列），但这并不容易，需要小心谨慎，
-因为当需要添加或删除内容到内存时，需要确保该内容仍在那个位置，否则，程序就会崩溃。
-下一部分的教程演示了如何从两个线程访问同一个内容。
+但这种方法存在一个问题：有两个不同的线程(主线程和辅助线程)都需要访问同一个内存区（这里是保存图片路径的队列），
+如果一个线程需要修改该内存区的内容时（例如，添加新的图片路径），此时该内存区却被另一个线程修改（例如，移除旧的图片路径），那么，其中一个线程很可能读取到错误的信息，而这，会导致程序崩溃。
+下一部分的教程演示了如何安全地从两个线程访问同一个内容。
 
-        loader thread: finished loading an image
-        loader thread: pos = get memory address of next element to load
-        main thread:   add new element in the queue
-        main thread:   queue moves in memory to an area with enough space to allocate it
-        loader thread: try to read element in pos  <- crash pos is no longer a valid memory address
+        loader thread: finished loading an image //loader thread 结束读取图片
+        loader thread: pos = get memory address of next element to load //pos=下一个需要读取的元素的地址
+        main thread:   add new element in the queue //添加新的元素到队列
+        main thread:   queue moves in memory to an area with enough space to allocate it //为了有足够的空间可以容纳新的元素，队列的内存地址发生改变
+        loader thread: try to read element in pos  <- crash pos is no longer a valid memory address //尝试读取pos上的指向的元素 <- 崩溃， 现在pos不再是一个可访问的内存地址，
 
 At this point we might be accessing a memory address that doesn't contain a string anymore, 
 or even trying to access a memory address that is outside of the memory assigned to our application.
  In this case the OS will kill it sending a segmentation fault signal 
- as we've seen in the memory chapter.
+ as we've seen in the memory chapter. 
 
-在这里，线程1和线程2会同时访问一个内存地址，但由于不能很好地安排其访问顺序，系统会终止它们并报出segmentation fault错误。
+在这里，线程1`loader thread` 和线程2`main thread`会同时访问一个内存地址`pos`，但由于不能很好地安排其访问顺序，系统会终止它们并报出segmentation fault错误。
 
 The reason this happens is that since thread 1 and 2 run simultaneously 
 we don't know in which order their instructions 
@@ -278,18 +215,15 @@ is modifying it and viceversa.
 For that we'll use some kind of lock: In C++ usually a mutex, 
 in openFrameworks an ofMutex.
 
-为了确保不同线程访问同一个内存可以井然有序，我们需要一个锁，当线程1访问时候，给该线程上锁，则其他线程不能访问。
+为了确保不同线程访问同一个内存可以井然有序，我们需要一个锁，当线程1操作的时候，给该线程上锁，则其他线程不能操作。
 这种锁，即是c++中的mutex，也就是openFrameworks中的ofMutex。
 
-But before seeing mutexes, let's see briefly some particulars of using thread while using openGL.
-
-在介绍mutex之前，我们需要了解下thread与openGL。
+在介绍mutex之前，我们还需要了解下thread与openGL。
 
 ## Threads and openGL
 
-You might have noticed in the previous examples:
-
-你可能会注意到前面
+ 
+你可能会注意到前面：
 
 ```cpp
 class ImageLoader: public ofThread{
@@ -340,12 +274,7 @@ void ofApp::keyPressed(int key){
     }
 }
 ```
-
-Instead of using an ofImage to load images, we are using an ofPixels
- and then in the main thread we use an ofImage to put the contents 
- of ofPixels into it. This is done because openGL, 
- in principle, can only work with 1 thread. That's why we call our main thread the GL thread.
-
+ 
 在副线程中，不使用ofImage，而使用ofPixels来读取图片。而是在主线程再将ofPixels的内容放入ofIamge中。
 这是因为，古老的openGL，一次只能和一个线程工作。而这也是为什么我们直接称主线程为GL线程。
 
