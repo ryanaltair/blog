@@ -200,20 +200,9 @@ a memory structure there's the possibility that the memory
         main thread:   queue moves in memory to an area with enough space to allocate it //为了有足够的空间可以容纳新的元素，队列的内存地址发生改变
         loader thread: try to read element in pos  <- crash pos is no longer a valid memory address //尝试读取pos上的指向的元素 <- 崩溃， 现在pos不再是一个可访问的内存地址，
 
-At this point we might be accessing a memory address that doesn't contain a string anymore, 
-or even trying to access a memory address that is outside of the memory assigned to our application.
- In this case the OS will kill it sending a segmentation fault signal 
- as we've seen in the memory chapter. 
 
-在这里，线程1`loader thread` 和线程2`main thread`会同时访问一个内存地址`pos`，但由于不能很好地安排其访问顺序，系统会终止它们并报出segmentation fault错误。
+在这里，线程1`loader thread` 和线程2`main thread`会同时访问一个内存地址`pos`，但由于不能很好地安排其访问顺序，系统会终止它们并报出segmentation fault错误（原因是其中一个线程 如 线程1 对该地址的修改，例如，增加新的数据，导致分配的内存位置不足，因此，系统配了新的内存区，并注销了原来的内存区，但就在这个时候，另一个进程， 线程2 开始了对该内存区的访问，并且，由于未更新内存区的位置，导致线程2对老的内存区进行了访问，但由于老的内存区已经被注销了，于是，系统就立即报错）。
 
-The reason this happens is that since thread 1 and 2 run simultaneously 
-we don't know in which order their instructions 
-area going to get executed. We need a way to ensure 
-that thread 1 cannot access the queue while thread 2 
-is modifying it and viceversa. 
-For that we'll use some kind of lock: In C++ usually a mutex, 
-in openFrameworks an ofMutex.
 
 为了确保不同线程访问同一个内存可以井然有序，我们需要一个锁，当线程1操作的时候，给该线程上锁，则其他线程不能操作。
 这种锁，即是c++中的mutex，也就是openFrameworks中的ofMutex。
@@ -275,32 +264,19 @@ void ofApp::keyPressed(int key){
 }
 ```
  
-在副线程中，不使用ofImage，而使用ofPixels来读取图片。而是在主线程再将ofPixels的内容放入ofIamge中。
-这是因为，古老的openGL，一次只能和一个线程工作。而这也是为什么我们直接称主线程为GL线程。
+在副线程中，不使用ofImage，而使用ofPixels来读取图片。而是在主线程再将ofPixels的内容放入ofIamge中。这是因为，古老的openGL，一次只能和一个线程工作。而这也是为什么我们直接称主线程为GL线程。
 
-As we mentioned in the advanced graphics chapter and other parts of this book, 
-openGL works asynchronously in some kind of client/server model. 
-Our application is the client sending data and drawing instructions to the openGL server which will send them to the graphics card in it's own times.
 
-在之前的高级图形（advanced graphics）中和ofbooks的其他章节中。
-openGL是典型的异步工作，客户端／服务器模式。我们的应用程序时客户端，用来发送信息，告诉服务器openGL需要显示什么，然后，openGL则会根据其实际情况，将需要显示的图形发送给显卡。
+在之前的高级图形（advanced graphics）中和ofbooks的其他章节中。openGL是典型的异步工作，客户端／服务器模式。我们的应用程序时客户端，用来发送信息，告诉服务器openGL需要显示什么，然后，openGL则会根据其实际情况，将需要显示的图形发送给显卡。
 
-Because of that, openGL knows how to work with one thread, the main thread from which the openGL context was created. 
-But if we try to do openGL calls from a different thread we will most surely crash the application, or at least not get the desired results.
 
-也正是因为这个原因，openGL可以很好地和一个线程协作，也就是主进程。
-但如果尝试从不同线程调用openGL，则必然会导致程序崩溃，至少不会显示想要的图片信息。
+也正是因为这个原因，openGL可以很好地和一个线程协作，也就是主进程。但如果尝试从不同线程调用openGL，则必然会导致程序崩溃，至少不会显示想要的图片信息。
 
-When we call `img.loadImage(path)` on an ofImage, it'll actually do some openGL calls, mainly create a texture and upload to it the contents of the image.
- If we did that from a thread that isn't the GL thread, our application will probably crash or just don't load the texture properly.
 
 而当调用ofImage的`img.loadImage(path)`,它实际上调用了openGL来处理图片的纹理。而如果我们在非GL线程调用它，那么，应用程序就会崩溃，或者，不会正确显示纹理。
 
-There's a way to tell ofImage, and most other objects that contain pixels and textures in openFrameworks, 
-to not use those textures and instead work only with pixels. That way we could use an ofImage to load the 
-images to pixels and later in the main thread activate the textures to be able to draw the images:
-当然，我们也可以告诉ofImage，和openFrameworks中其他需要使用像素和纹理的对象，
-不要使用像素，并且，不要调用openGL读取纹路，除非在GL线程。如下：
+
+当然，我们也可以告诉ofImage，和openFrameworks中其他需要使用像素和纹理的对象，不要使用像素，并且，不要调用openGL读取纹路，这样，就可以在非GL线程下使用ofImage了。如下：
 
 ```cpp
 class ImageLoader: public ofThread{
@@ -352,19 +328,16 @@ void ofApp::keyPressed(int key){
 }
 ```
 
-There are ways to use openGL from different threads, for example creating 
-a shared context to upload textures in a different thread or using PBO's to map a memory area and later upload to that memory area from a different thread but that's out of the scope of this chapter. 
+
 In general remember that accessing openGL outside of the GL thread is not safe. 
 In openFrameworks you should only do operations that involve openGL calls from the main thread, that is, from the calls that happen in the setup/update/draw loop, the key and mouse events, and the related ofEvents. 
 If you start a thread and call a function or notify an ofEvent from it, that call will also happen in the auxiliary thread, so be careful to not do any GL calls from there.
 
-在不同线程中，有许多方法可以安全使用openGL，例如，创建一个可分享区域，用来给不同的线程读取纹路。或者使用PBO来规划内存（不过这超出本章节讨论范围）
-总体而言，在openGL线程外访问openGL是很不安全的。在openFrameworks，你应该只在主线程调用openGL。在副线程中，如果调用了ofEvent，也需要确保其没有调用openGL。
+在不同线程中，有许多方法可以安全使用openGL，例如，创建一个可分享区域，用来给不同的线程读取纹路。或者使用PBO来规划内存（不过这超出本章节讨论范围）。
+总体而言，在openGL线程外访问openGL是很不安全的。在openFrameworks，你应该只在主线程的`setup()`/`update()`/`draw()`,`key event`和 `mouse event` 及其他标准的`ofeEvent`中调用openGL相关的操作。在其他线程中，如果调用了ofEvent，也需要确保其没有调用openGL。
 
-A very specific case is sound, sound APIs in openFrameworks, in particular ofSoundStream, create their own threads since sound's timing needs to be super precise. 
-So when working with ofSoundStream be careful not to use any openGL calls and in general apply the same logic as if you where inside the threadedFunction of an ofThread. We'll see more about this in the next sections.
 
-另外，对于声音，也需要多加留意，在ofSoundStream中，会创建其单独的线程来保证声音的准确输出，因此，在使用ofSoundStream，也需要小心。
+另外，对于声音，也需要多加留意，ofSoundStream会创建其单独的线程来保证声音的准确输出，因此，在使用ofSoundStream，也需要小心。
 
 ## ofMutex
 
